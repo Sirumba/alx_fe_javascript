@@ -316,6 +316,114 @@ function init() {
     }
   }
 }
+// ==========================
+// 🔄 SERVER SYNC SIMULATION
+// ==========================
+
+// Mock API endpoints (you can change these if needed)
+const SERVER_URL = "https://jsonplaceholder.typicode.com/posts";
+
+// Function to simulate fetching new data from the server
+async function fetchServerQuotes() {
+  try {
+    const res = await fetch(SERVER_URL);
+    const data = await res.json();
+
+    // Simulate quotes from server (convert post titles to quote objects)
+    const serverQuotes = data.slice(0, 5).map(item => ({
+      text: item.title,
+      category: "Server"
+    }));
+
+    handleServerSync(serverQuotes);
+  } catch (err) {
+    console.error("❌ Failed to fetch from server:", err);
+  }
+}
+
+// Merge local + server data
+function handleServerSync(serverQuotes) {
+  let localQuotes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+
+  const merged = resolveConflicts(localQuotes, serverQuotes);
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+  quotes = merged;
+  populateCategories();
+  showNotification("🔄 Synced with server successfully.");
+}
+
+// Simple conflict resolution (server overwrites duplicates)
+function resolveConflicts(localQuotes, serverQuotes) {
+  const localTexts = new Set(localQuotes.map(q => q.text.toLowerCase()));
+  const newServerQuotes = serverQuotes.filter(
+    q => !localTexts.has(q.text.toLowerCase())
+  );
+
+  const merged = [...localQuotes, ...newServerQuotes];
+
+  // In case of conflict (same text, different category), server wins
+  const uniqueByText = {};
+  merged.forEach(q => {
+    uniqueByText[q.text.toLowerCase()] = q;
+  });
+
+  return Object.values(uniqueByText);
+}
+
+// Periodically sync every 30 seconds
+function startAutoSync() {
+  fetchServerQuotes(); // Initial sync on load
+  setInterval(fetchServerQuotes, 30000);
+}
+
+// UI notification for sync updates
+function showNotification(message) {
+  let note = document.getElementById("syncNotification");
+  if (!note) {
+    note = document.createElement("div");
+    note.id = "syncNotification";
+    note.style.position = "fixed";
+    note.style.bottom = "20px";
+    note.style.right = "20px";
+    note.style.background = "#333";
+    note.style.color = "#fff";
+    note.style.padding = "10px 15px";
+    note.style.borderRadius = "8px";
+    note.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
+    document.body.appendChild(note);
+  }
+
+  note.textContent = message;
+  note.style.opacity = "1";
+
+  setTimeout(() => {
+    note.style.transition = "opacity 1s ease";
+    note.style.opacity = "0";
+  }, 3000);
+}
+
+// Add manual sync button to UI
+function addSyncButton() {
+  const container = document.getElementById("add-quote-container");
+  if (!container) return;
+
+  const syncBtn = document.createElement("button");
+  syncBtn.textContent = "🔁 Manual Sync with Server";
+  syncBtn.style.marginTop = "15px";
+  syncBtn.addEventListener("click", fetchServerQuotes);
+
+  container.appendChild(syncBtn);
+}
+
+// Modify init() to start auto sync after everything loads
+const originalInit = init;
+init = function () {
+  originalInit();
+  addSyncButton();
+  startAutoSync();
+};
+
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
